@@ -2,95 +2,145 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Test MCU1</title>
+    <title>Tesla MCU1 - JSMpeg</title>
 
     <style>
         body {
+            margin: 0;
+            padding: 0;
             background: black;
             color: white;
             font-family: Arial;
-            font-size: 24px;
-            padding: 20px;
+            text-align: center;
         }
 
-        video {
+        h2 {
+            font-size: 32px;
+        }
+
+        canvas {
             width: 100%;
-            background: #222;
+            max-width: 100%;
+            background: black;
+        }
+
+        button {
+            font-size: 28px;
+            padding: 15px 40px;
+            margin: 15px;
         }
 
         #estado {
-            margin-top: 20px;
+            font-size: 22px;
             padding: 15px;
-            background: #333;
         }
     </style>
 </head>
 
 <body>
 
-<h2>Test Tesla MCU1 MPEG</h2>
+<h2>Tesla MCU1 - MPEG1</h2>
 
-<video id="video" controls preload="metadata">
-    <source
-        src="https://media.githubusercontent.com/media/guysofcms/mpgTest/refs/heads/main/Historias%20corrientes%20T4x1%20MPEG1.mpg"
-        type="video/mpeg">
-</video>
+<canvas id="pantalla"></canvas>
 
-<div id="estado">Comprobando...</div>
+<br>
+
+<button onclick="playVideo()">PLAY</button>
+<button onclick="pauseVideo()">PAUSA</button>
+
+<div id="estado">Cargando JSMpeg...</div>
+
+<script src="jsmpeg.min.js"></script>
 
 <script>
-var video = document.getElementById("video");
 var estado = document.getElementById("estado");
+var canvas = document.getElementById("pantalla");
 
-function escribir(texto) {
-    estado.innerHTML += "<br>" + texto;
+var url =
+"https://media.githubusercontent.com/media/guysofcms/mpgTest/refs/heads/main/episodio1.ts";
+
+var primerFrame = true;
+
+try {
+
+    var player = new JSMpeg.Player(url, {
+        canvas: canvas,
+
+        autoplay: false,
+        loop: false,
+
+        // Primero probamos sin audio
+        audio: false,
+
+        // Compatibilidad con navegadores antiguos
+        disableGl: true,
+        disableWebAssembly: true,
+
+        // Descargar el vídeo por partes
+        progressive: true,
+        throttled: true,
+
+        decodeFirstFrame: true,
+
+        onSourceEstablished: function() {
+            estado.innerHTML = "Conexión con el vídeo OK";
+        },
+
+        onVideoDecode: function() {
+            if (primerFrame) {
+                estado.innerHTML = "¡MPEG-1 DECODIFICANDO!";
+                primerFrame = false;
+            }
+        },
+
+        onPlay: function() {
+            estado.innerHTML = "Reproduciendo...";
+        },
+
+        onPause: function() {
+            estado.innerHTML = "Pausado";
+        },
+
+        onStalled: function() {
+            estado.innerHTML = "Esperando datos...";
+        },
+
+        onEnded: function() {
+            estado.innerHTML = "Fin del vídeo";
+        }
+    });
+
+    estado.innerHTML = "JSMpeg preparado - pulsa PLAY";
+
+}
+catch (e) {
+
+    estado.innerHTML =
+        "ERROR: " + e.message;
 }
 
-estado.innerHTML =
-    "video/mpeg: [" + video.canPlayType("video/mpeg") + "]";
+function playVideo() {
 
-escribir("MP4 H264: [" +
-    video.canPlayType('video/mp4; codecs="avc1.42E01E"') +
-    "]");
+    try {
+        estado.innerHTML = "Intentando reproducir...";
+        player.play();
+    }
+    catch(e) {
+        estado.innerHTML =
+            "ERROR PLAY: " + e.message;
+    }
+}
 
-video.addEventListener("loadstart", function() {
-    escribir("loadstart OK");
-});
+function pauseVideo() {
 
-video.addEventListener("loadedmetadata", function() {
-    escribir("loadedmetadata OK");
-});
-
-video.addEventListener("canplay", function() {
-    escribir("canplay OK");
-});
-
-video.addEventListener("playing", function() {
-    escribir("PLAYING");
-});
-
-video.addEventListener("stalled", function() {
-    escribir("STALLED");
-});
-
-video.addEventListener("error", function() {
-
-    var codigo = video.error ? video.error.code : "desconocido";
-
-    escribir("ERROR VIDEO: " + codigo);
-
-    if (codigo == 1)
-        escribir("MEDIA_ERR_ABORTED");
-
-    if (codigo == 2)
-        escribir("MEDIA_ERR_NETWORK");
-
-    if (codigo == 3)
-        escribir("MEDIA_ERR_DECODE");
-
-    if (codigo == 4)
-        escribir("MEDIA_ERR_SRC_NOT_SUPPORTED");
-});
+    try {
+        player.pause();
+    }
+    catch(e) {
+        estado.innerHTML =
+            "ERROR PAUSA: " + e.message;
+    }
+}
 </script>
 
 </body>
