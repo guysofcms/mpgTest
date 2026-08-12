@@ -2,20 +2,96 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Tesla MPG Test</title>
-</head>
-<body style="margin:0;background:black;">
+    <title>Test MCU1</title>
 
-<video
-    controls
-    preload="metadata"
-    style="width:100%;height:auto;"
->
+    <style>
+        body {
+            background: black;
+            color: white;
+            font-family: Arial;
+            font-size: 24px;
+            padding: 20px;
+        }
+
+        video {
+            width: 100%;
+            background: #222;
+        }
+
+        #estado {
+            margin-top: 20px;
+            padding: 15px;
+            background: #333;
+        }
+    </style>
+</head>
+
+<body>
+
+<h2>Test Tesla MCU1 MPEG</h2>
+
+<video id="video" controls preload="metadata">
     <source
         src="https://media.githubusercontent.com/media/guysofcms/mpgTest/refs/heads/main/Historias%20corrientes%20T4x1%20MPEG1.mpg"
-        type="video/mpeg"
-    >
+        type="video/mpeg">
 </video>
+
+<div id="estado">Comprobando...</div>
+
+<script>
+var video = document.getElementById("video");
+var estado = document.getElementById("estado");
+
+function escribir(texto) {
+    estado.innerHTML += "<br>" + texto;
+}
+
+estado.innerHTML =
+    "video/mpeg: [" + video.canPlayType("video/mpeg") + "]";
+
+escribir("MP4 H264: [" +
+    video.canPlayType('video/mp4; codecs="avc1.42E01E"') +
+    "]");
+
+video.addEventListener("loadstart", function() {
+    escribir("loadstart OK");
+});
+
+video.addEventListener("loadedmetadata", function() {
+    escribir("loadedmetadata OK");
+});
+
+video.addEventListener("canplay", function() {
+    escribir("canplay OK");
+});
+
+video.addEventListener("playing", function() {
+    escribir("PLAYING");
+});
+
+video.addEventListener("stalled", function() {
+    escribir("STALLED");
+});
+
+video.addEventListener("error", function() {
+
+    var codigo = video.error ? video.error.code : "desconocido";
+
+    escribir("ERROR VIDEO: " + codigo);
+
+    if (codigo == 1)
+        escribir("MEDIA_ERR_ABORTED");
+
+    if (codigo == 2)
+        escribir("MEDIA_ERR_NETWORK");
+
+    if (codigo == 3)
+        escribir("MEDIA_ERR_DECODE");
+
+    if (codigo == 4)
+        escribir("MEDIA_ERR_SRC_NOT_SUPPORTED");
+});
+</script>
 
 </body>
 </html>
