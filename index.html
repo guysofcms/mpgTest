@@ -2,37 +2,51 @@
 <html>
 <head>
     <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
     <title>Tesla MCU1 - JSMpeg</title>
 
     <style>
-        body {
+        html, body {
             margin: 0;
             padding: 0;
             background: black;
             color: white;
-            font-family: Arial;
+            font-family: Arial, sans-serif;
             text-align: center;
         }
 
         h2 {
-            font-size: 32px;
+            font-size: 30px;
+            margin: 15px;
         }
 
-        canvas {
+        #contenedor {
             width: 100%;
-            max-width: 100%;
+            background: black;
+        }
+
+        #pantalla {
+            width: 100%;
+            height: auto;
             background: black;
         }
 
         button {
-            font-size: 28px;
-            padding: 15px 40px;
-            margin: 15px;
+            font-size: 26px;
+            padding: 15px 35px;
+            margin: 10px;
+            cursor: pointer;
         }
 
         #estado {
-            font-size: 22px;
+            margin: 15px;
             padding: 15px;
+            background: #333;
+            font-size: 20px;
+            text-align: left;
         }
     </style>
 </head>
@@ -41,106 +55,461 @@
 
 <h2>Tesla MCU1 - MPEG1</h2>
 
-<canvas id="pantalla"></canvas>
+<div id="contenedor">
+    <canvas id="pantalla"></canvas>
+</div>
 
-<br>
+<div>
+    <button onclick="reproducir()">
+        PLAY
+    </button>
 
-<button onclick="playVideo()">PLAY</button>
-<button onclick="pauseVideo()">PAUSA</button>
+    <button onclick="pausar()">
+        PAUSA
+    </button>
 
-<div id="estado">Cargando JSMpeg...</div>
+    <button onclick="subirVolumen()">
+        VOL +
+    </button>
+</div>
+
+<div id="estado">
+    Inicializando...
+</div>
+
 
 <script src="jsmpeg.min.js"></script>
 
 <script>
+
+/*
+ * =====================================================
+ * CONFIGURACION
+ * =====================================================
+ */
+
+var VIDEO_URL =
+    "https://media.githubusercontent.com/media/guysofcms/mpgTest/refs/heads/main/episodio1.ts";
+
+
+/*
+ * =====================================================
+ * VARIABLES
+ * =====================================================
+ */
+
 var estado = document.getElementById("estado");
 var canvas = document.getElementById("pantalla");
 
-var url =
-"https://media.githubusercontent.com/media/guysofcms/mpgTest/refs/heads/main/episodio1.ts";
+var player = null;
 
-var primerFrame = true;
+var videoDetectado = false;
+var audioDetectado = false;
+
+
+/*
+ * =====================================================
+ * ESTADO
+ * =====================================================
+ */
+
+function mostrar(texto) {
+    estado.innerHTML = texto;
+}
+
+
+/*
+ * =====================================================
+ * COMPROBAR WEBAUDIO
+ * =====================================================
+ */
+
+function comprobarAudio() {
+
+    var AudioContext =
+        window.AudioContext ||
+        window.webkitAudioContext;
+
+    if (AudioContext) {
+        return "WebAudio disponible";
+    }
+
+    return "WebAudio NO disponible";
+}
+
+
+/*
+ * =====================================================
+ * CREAR REPRODUCTOR
+ * =====================================================
+ */
 
 try {
 
-    var player = new JSMpeg.Player(url, {
-        canvas: canvas,
+    player = new JSMpeg.Player(
+        VIDEO_URL,
+        {
+            canvas: canvas,
 
-        autoplay: false,
-        loop: false,
+            /*
+             * No arrancamos automáticamente.
+             * El usuario pulsa PLAY.
+             */
+            autoplay: false,
 
-        // Primero probamos sin audio
-        audio: false,
+            loop: false,
 
-        // Compatibilidad con navegadores antiguos
-        disableGl: true,
-        disableWebAssembly: true,
+            /*
+             * AUDIO ACTIVADO
+             */
+            audio: true,
 
-        // Descargar el vídeo por partes
-        progressive: true,
-        throttled: true,
+            video: true,
 
-        decodeFirstFrame: true,
+            /*
+             * Para máxima compatibilidad
+             * con el navegador antiguo del MCU1.
+             */
+            disableGl: true,
 
-        onSourceEstablished: function() {
-            estado.innerHTML = "Conexión con el vídeo OK";
-        },
+            disableWebAssembly: true,
 
-        onVideoDecode: function() {
-            if (primerFrame) {
-                estado.innerHTML = "¡MPEG-1 DECODIFICANDO!";
-                primerFrame = false;
+            /*
+             * Descargar el TS progresivamente.
+             */
+            progressive: true,
+
+            throttled: true,
+
+            /*
+             * Mostrar primer frame.
+             */
+            decodeFirstFrame: true,
+
+            /*
+             * =================================================
+             * EVENTOS
+             * =================================================
+             */
+
+            onSourceEstablished: function() {
+
+                mostrar(
+                    "Conexion con el video OK" +
+                    "<br>" +
+                    comprobarAudio()
+                );
+            },
+
+
+            onVideoDecode: function() {
+
+                if (!videoDetectado) {
+
+                    videoDetectado = true;
+
+                    mostrarEstado();
+                }
+            },
+
+
+            onAudioDecode: function() {
+
+                if (!audioDetectado) {
+
+                    audioDetectado = true;
+
+                    mostrarEstado();
+                }
+            },
+
+
+            onPlay: function() {
+
+                mostrarEstado();
+            },
+
+
+            onPause: function() {
+
+                mostrarEstado();
+            },
+
+
+            onStalled: function() {
+
+                estado.innerHTML =
+                    estado.innerHTML +
+                    "<br>Esperando datos...";
+            },
+
+
+            onEnded: function() {
+
+                mostrar(
+                    "Fin del video" +
+                    "<br>" +
+                    "Video MPEG1: " +
+                    (videoDetectado ? "OK" : "NO") +
+                    "<br>" +
+                    "Audio MP2: " +
+                    (audioDetectado ? "OK" : "NO")
+                );
             }
-        },
-
-        onPlay: function() {
-            estado.innerHTML = "Reproduciendo...";
-        },
-
-        onPause: function() {
-            estado.innerHTML = "Pausado";
-        },
-
-        onStalled: function() {
-            estado.innerHTML = "Esperando datos...";
-        },
-
-        onEnded: function() {
-            estado.innerHTML = "Fin del vídeo";
         }
-    });
+    );
 
-    estado.innerHTML = "JSMpeg preparado - pulsa PLAY";
+
+    /*
+     * Volumen máximo
+     */
+    player.volume = 1;
+
+
+    mostrar(
+        "JSMpeg preparado" +
+        "<br>" +
+        comprobarAudio() +
+        "<br>" +
+        "Pulsa PLAY"
+    );
 
 }
 catch (e) {
 
-    estado.innerHTML =
-        "ERROR: " + e.message;
+    mostrar(
+        "ERROR AL CREAR JSMPEG" +
+        "<br>" +
+        e.message
+    );
 }
 
-function playVideo() {
 
-    try {
-        estado.innerHTML = "Intentando reproducir...";
-        player.play();
+/*
+ * =====================================================
+ * MOSTRAR DIAGNOSTICO
+ * =====================================================
+ */
+
+function mostrarEstado() {
+
+    var texto = "";
+
+    texto +=
+        "Video MPEG1: " +
+        (videoDetectado ? "DECODIFICANDO OK" : "esperando...");
+
+    texto += "<br>";
+
+    texto +=
+        "Audio MP2: " +
+        (audioDetectado ? "DECODIFICANDO OK" : "esperando...");
+
+    texto += "<br>";
+
+    texto += comprobarAudio();
+
+    texto += "<br>";
+
+    if (player) {
+
+        texto +=
+            "Volumen: " +
+            Math.round(player.volume * 100) +
+            "%";
+
+        texto += "<br>";
+
+        texto +=
+            "Estado: " +
+            (player.paused ? "PAUSA" : "REPRODUCIENDO");
     }
-    catch(e) {
-        estado.innerHTML =
-            "ERROR PLAY: " + e.message;
-    }
+
+    mostrar(texto);
 }
 
-function pauseVideo() {
+
+/*
+ * =====================================================
+ * DESBLOQUEAR AUDIO
+ * =====================================================
+ */
+
+function desbloquearAudio() {
+
+    if (!player) {
+        return;
+    }
+
+    /*
+     * JSMpeg tiene un mecanismo interno
+     * para desbloquear WebAudio en navegadores
+     * que requieren interacción del usuario.
+     */
+    try {
+
+        if (
+            player.audioOut &&
+            player.audioOut.unlock &&
+            !player.audioOut.unlocked
+        ) {
+
+            player.audioOut.unlock(
+                function() {
+
+                    player.volume = 1;
+
+                    player.play();
+
+                    mostrarEstado();
+                }
+            );
+
+            return;
+        }
+
+    }
+    catch (e) {
+
+        /*
+         * Si unlock no funciona,
+         * continuamos con el método normal.
+         */
+    }
+
+
+    /*
+     * Algunos navegadores mantienen
+     * AudioContext suspendido.
+     */
+    try {
+
+        if (
+            player.audioOut &&
+            player.audioOut.context &&
+            player.audioOut.context.resume
+        ) {
+
+            player.audioOut.context.resume();
+        }
+
+    }
+    catch (e) {
+    }
+
+
+    player.volume = 1;
+
+    player.play();
+}
+
+
+/*
+ * =====================================================
+ * PLAY
+ * =====================================================
+ */
+
+function reproducir() {
+
+    if (!player) {
+
+        mostrar(
+            "ERROR: reproductor no inicializado"
+        );
+
+        return;
+    }
+
+
+    mostrar(
+        "Intentando iniciar video y audio..."
+    );
+
+
+    /*
+     * Importante:
+     *
+     * desbloquearAudio() se ejecuta
+     * DIRECTAMENTE desde el clic del usuario.
+     *
+     * Esto ayuda a los navegadores que
+     * bloquean WebAudio hasta una
+     * interacción física.
+     */
+    desbloquearAudio();
+}
+
+
+/*
+ * =====================================================
+ * PAUSA
+ * =====================================================
+ */
+
+function pausar() {
+
+    if (!player) {
+        return;
+    }
 
     try {
+
         player.pause();
+
+        mostrarEstado();
+
     }
-    catch(e) {
-        estado.innerHTML =
-            "ERROR PAUSA: " + e.message;
+    catch (e) {
+
+        mostrar(
+            "ERROR PAUSA" +
+            "<br>" +
+            e.message
+        );
     }
 }
+
+
+/*
+ * =====================================================
+ * VOLUMEN
+ * =====================================================
+ */
+
+function subirVolumen() {
+
+    if (!player) {
+        return;
+    }
+
+    player.volume = 1;
+
+    /*
+     * Intentamos también despertar WebAudio
+     * aprovechando que VOL+ es otro clic
+     * del usuario.
+     */
+
+    try {
+
+        if (
+            player.audioOut &&
+            player.audioOut.context &&
+            player.audioOut.context.resume
+        ) {
+
+            player.audioOut.context.resume();
+        }
+
+    }
+    catch (e) {
+    }
+
+
+    mostrarEstado();
+}
+
 </script>
 
 </body>
