@@ -6,7 +6,7 @@
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0">
 
-    <title>Tesla MCU1 MJPEG</title>
+    <title>Tesla MCU1 MJPEG + Audio</title>
 
     <style>
         html, body {
@@ -32,34 +32,19 @@
 
         button {
             font-size: 28px;
-            padding: 15px 40px;
-            margin: 10px;
-        }
-
-        #volumenZona {
-            margin: 15px auto;
-            width: 90%;
-            max-width: 700px;
+            padding: 15px 35px;
+            margin: 8px;
         }
 
         #barraVolumen {
-            width: 100%;
+            width: 85%;
             height: 35px;
         }
 
-        #volumenTexto {
-            font-size: 20px;
-            margin-bottom: 5px;
-        }
-
-        #tiempo {
-            font-size: 20px;
-            margin-top: 10px;
-        }
-
         #estado {
-            margin-top: 10px;
-            font-size: 20px;
+            margin-top: 15px;
+            font-size: 19px;
+            line-height: 1.5;
         }
     </style>
 </head>
@@ -68,13 +53,11 @@
 
 <canvas id="pantalla"></canvas>
 
-<!-- AUDIO SEPARADO -->
 <audio
     id="audio"
     preload="auto"
-    src="https://media.githubusercontent.com/media/guysofcms/mpgTest/refs/heads/main/episodio1.mp3">
+    src="episodio1.mp3">
 </audio>
-
 
 <div id="controles">
 
@@ -86,33 +69,25 @@
         PAUSA
     </button>
 
+    <br>
 
-    <div id="volumenZona">
-
-        <div id="volumenTexto">
-            Volumen: 70%
-        </div>
-
-        <input
-            id="barraVolumen"
-            type="range"
-            min="0"
-            max="100"
-            value="70"
-            onchange="cambiarVolumen(this.value)"
-            oninput="cambiarVolumen(this.value)"
-        >
-
+    <div>
+        Volumen:
+        <span id="volumenTexto">70%</span>
     </div>
 
-
-    <div id="tiempo">
-        00:00
-    </div>
-
+    <input
+        id="barraVolumen"
+        type="range"
+        min="0"
+        max="100"
+        value="70"
+        onchange="cambiarVolumen(this.value)"
+        oninput="cambiarVolumen(this.value)"
+    >
 
     <div id="estado">
-        Preparando reproductor MJPEG...
+        Preparando...
     </div>
 
 </div>
@@ -120,58 +95,25 @@
 
 <script>
 
-/*
-=========================================================
-CONFIGURACION
-=========================================================
-*/
+/* =====================================================
+   CONFIGURACION
+   ===================================================== */
 
-/*
-IMPORTANTE:
-
-Este FPS debe ser el mismo con el que
-generaste episodio1.mjpg.
-*/
-
-var FPS = 25;
-
-
-/*
-VIDEO MJPEG
-*/
+var FPS = 15;
 
 var VIDEO_URL =
 "https://media.githubusercontent.com/media/guysofcms/mpgTest/refs/heads/main/episodio1.mjpg";
 
+var CHUNK_SIZE = 1024 * 1024;
 
-/*
-Descargamos el vídeo por bloques de 1 MB.
-*/
+var MAX_FRAMES = 45;
 
-var CHUNK_SIZE =
-1024 * 1024;
+var MIN_FRAMES = 15;
 
 
-/*
-Frames máximos guardados en memoria.
-*/
-
-var MAX_FRAMES = 60;
-
-
-/*
-Cuando queden menos frames,
-pedimos otro bloque.
-*/
-
-var MIN_FRAMES = 25;
-
-
-/*
-=========================================================
-ELEMENTOS
-=========================================================
-*/
+/* =====================================================
+   ELEMENTOS
+   ===================================================== */
 
 var canvas =
 document.getElementById("pantalla");
@@ -185,25 +127,16 @@ document.getElementById("estado");
 var audio =
 document.getElementById("audio");
 
-var tiempoTexto =
-document.getElementById("tiempo");
-
 var volumenTexto =
 document.getElementById("volumenTexto");
 
 
-/*
-Volumen inicial.
-*/
-
 audio.volume = 0.70;
 
 
-/*
-=========================================================
-VARIABLES
-=========================================================
-*/
+/* =====================================================
+   VARIABLES VIDEO
+   ===================================================== */
 
 var frames = [];
 
@@ -220,57 +153,45 @@ var reproduciendo = false;
 
 var primerFrame = true;
 
-
-/*
-Número global del siguiente frame
-que tenemos que reproducir.
-*/
-
-var numeroFrame = 0;
-
-
-/*
-Evita intentar decodificar dos JPEG
-simultáneamente.
-*/
-
-var decodificando = false;
-
-
-/*
-Imagen JPEG.
-*/
-
 var imagen =
 new Image();
-
-
-/*
-Compatibilidad con WebKit antiguo.
-*/
 
 var URL_API =
 window.URL ||
 window.webkitURL;
 
 
-/*
-=========================================================
-UTILIDADES
-=========================================================
-*/
+/* =====================================================
+   ESTADO
+   ===================================================== */
 
-function mostrar(texto) {
+function actualizarEstado(texto) {
 
-    estado.innerHTML = texto;
+    var audioTime = 0;
+
+    try {
+        audioTime = audio.currentTime;
+    }
+    catch(e) {
+    }
+
+    estado.innerHTML =
+        texto +
+        "<br>Frames buffer: " +
+        frames.length +
+        "<br>Audio readyState: " +
+        audio.readyState +
+        "<br>Audio paused: " +
+        audio.paused +
+        "<br>Audio time: " +
+        audioTime.toFixed(1);
 
 }
 
 
-/*
-Copiar Uint8Array sin usar métodos
-modernos que MCU1 podría no soportar.
-*/
+/* =====================================================
+   ARRAYS
+   ===================================================== */
 
 function copiar(datos, inicio, fin) {
 
@@ -292,10 +213,6 @@ function copiar(datos, inicio, fin) {
     return salida;
 }
 
-
-/*
-Combinar dos Uint8Array.
-*/
 
 function unir(a, b) {
 
@@ -323,16 +240,9 @@ function unir(a, b) {
 }
 
 
-/*
-=========================================================
-BUSCAR LOS JPEG DENTRO DEL MJPG
-=========================================================
-
-JPEG:
-
-inicio = FF D8
-final  = FF D9
-*/
+/* =====================================================
+   EXTRAER JPEG
+   ===================================================== */
 
 function procesarBloque(nuevoBloque) {
 
@@ -348,11 +258,6 @@ function procesarBloque(nuevoBloque) {
 
 
     while (i < datos.length - 1) {
-
-
-        /*
-        Inicio JPEG.
-        */
 
         if (inicio < 0) {
 
@@ -370,11 +275,6 @@ function procesarBloque(nuevoBloque) {
 
         }
 
-
-        /*
-        Final JPEG.
-        */
-
         else {
 
             if (
@@ -389,9 +289,7 @@ function procesarBloque(nuevoBloque) {
                         i + 2
                     );
 
-
                 frames.push(frame);
-
 
                 inicio = -1;
 
@@ -402,14 +300,9 @@ function procesarBloque(nuevoBloque) {
 
         }
 
-
         i++;
     }
 
-
-    /*
-    JPEG incompleto al final.
-    */
 
     if (inicio >= 0) {
 
@@ -423,10 +316,6 @@ function procesarBloque(nuevoBloque) {
     }
 
     else {
-
-        /*
-        Posible FF al final del bloque.
-        */
 
         if (
             datos.length > 0 &&
@@ -454,11 +343,9 @@ function procesarBloque(nuevoBloque) {
 }
 
 
-/*
-=========================================================
-DESCARGAR MJPEG POR HTTP RANGE
-=========================================================
-*/
+/* =====================================================
+   HTTP RANGE
+   ===================================================== */
 
 function descargarBloque() {
 
@@ -478,8 +365,7 @@ function descargarBloque() {
     descargando = true;
 
 
-    var inicio =
-        offset;
+    var inicio = offset;
 
     var final =
         offset +
@@ -547,10 +433,10 @@ function descargarBloque() {
                     datos.length;
 
 
-                /*
-                Si recibimos menos de lo pedido,
-                estamos al final.
-                */
+                actualizarEstado(
+                    "MJPEG conectado"
+                );
+
 
                 if (
                     datos.length <
@@ -561,10 +447,6 @@ function descargarBloque() {
 
                 }
 
-
-                /*
-                Continuamos llenando buffer.
-                */
 
                 if (
                     frames.length <
@@ -580,7 +462,7 @@ function descargarBloque() {
 
             else {
 
-                mostrar(
+                actualizarEstado(
                     "ERROR HTTP MJPEG: " +
                     xhr.status
                 );
@@ -600,7 +482,7 @@ function descargarBloque() {
 
         descargando = false;
 
-        mostrar(
+        actualizarEstado(
             "ERROR XHR: " +
             e.message
         );
@@ -610,11 +492,9 @@ function descargarBloque() {
 }
 
 
-/*
-=========================================================
-CREAR JPEG BLOB
-=========================================================
-*/
+/* =====================================================
+   BLOB
+   ===================================================== */
 
 function crearBlob(datos) {
 
@@ -630,7 +510,6 @@ function crearBlob(datos) {
     }
 
     catch(e) {
-
 
         var BlobBuilder =
             window.WebKitBlobBuilder ||
@@ -652,7 +531,6 @@ function crearBlob(datos) {
 
         }
 
-
         throw e;
 
     }
@@ -660,95 +538,16 @@ function crearBlob(datos) {
 }
 
 
-/*
-=========================================================
-RELOJ MAESTRO = AUDIO
-=========================================================
+/* =====================================================
+   VIDEO
+   ===================================================== */
 
-El audio decide qué frame debería
-estar mostrándose.
-
-Ejemplo:
-
-audio = 10 segundos
-FPS   = 15
-
-frame esperado = 150
-*/
-
-function actualizarVideo() {
+function siguienteFrame() {
 
     if (!reproduciendo) {
         return;
     }
 
-
-    if (decodificando) {
-
-        setTimeout(
-            actualizarVideo,
-            10
-        );
-
-        return;
-    }
-
-
-    /*
-    Tiempo real del audio.
-    */
-
-    var tiempoAudio =
-        audio.currentTime || 0;
-
-
-    var frameEsperado =
-        Math.floor(
-            tiempoAudio * FPS
-        );
-
-
-    /*
-    Si el vídeo se ha quedado atrás,
-    descartamos frames.
-
-    Esto evita que el retraso se vaya
-    acumulando.
-    */
-
-    while (
-        numeroFrame < frameEsperado &&
-        frames.length > 1
-    ) {
-
-        frames.shift();
-
-        numeroFrame++;
-
-    }
-
-
-    /*
-    Todavía no toca mostrar
-    el siguiente frame.
-    */
-
-    if (
-        numeroFrame > frameEsperado
-    ) {
-
-        setTimeout(
-            actualizarVideo,
-            10
-        );
-
-        return;
-    }
-
-
-    /*
-    Nos hemos quedado sin datos.
-    */
 
     if (frames.length === 0) {
 
@@ -759,7 +558,7 @@ function actualizarVideo() {
 
             audio.pause();
 
-            mostrar(
+            actualizarEstado(
                 "Fin del video"
             );
 
@@ -767,8 +566,8 @@ function actualizarVideo() {
         }
 
 
-        mostrar(
-            "Cargando datos..."
+        actualizarEstado(
+            "Esperando MJPEG..."
         );
 
 
@@ -776,20 +575,14 @@ function actualizarVideo() {
 
 
         setTimeout(
-            actualizarVideo,
-            50
+            siguienteFrame,
+            100
         );
 
 
         return;
-
     }
 
-
-    /*
-    Pedir más vídeo antes
-    de vaciar el buffer.
-    */
 
     if (
         frames.length <
@@ -801,39 +594,8 @@ function actualizarVideo() {
     }
 
 
-    /*
-    Mostrar siguiente JPEG.
-    */
-
-    mostrarFrame();
-
-}
-
-
-/*
-=========================================================
-MOSTRAR FRAME JPEG
-=========================================================
-*/
-
-function mostrarFrame() {
-
-    if (frames.length === 0) {
-
-        decodificando = false;
-
-        return;
-    }
-
-
-    decodificando = true;
-
-
     var frame =
         frames.shift();
-
-
-    numeroFrame++;
 
 
     var blob;
@@ -848,26 +610,8 @@ function mostrarFrame() {
 
     catch(e) {
 
-        decodificando = false;
-
-        mostrar(
-            "ERROR Blob: " +
-            e.message
-        );
-
-        return;
-    }
-
-
-    if (
-        !URL_API ||
-        !URL_API.createObjectURL
-    ) {
-
-        decodificando = false;
-
-        mostrar(
-            "createObjectURL no disponible"
+        actualizarEstado(
+            "ERROR Blob"
         );
 
         return;
@@ -880,14 +624,13 @@ function mostrarFrame() {
         );
 
 
+    var inicioDecode =
+        new Date().getTime();
+
+
     imagen.onload =
         function() {
 
-
-            /*
-            Configuramos resolución real
-            en el primer frame.
-            */
 
             if (primerFrame) {
 
@@ -923,19 +666,30 @@ function mostrarFrame() {
             }
 
 
-            decodificando = false;
+            var usado =
+                new Date().getTime() -
+                inicioDecode;
 
 
-            /*
-            Volvemos rápidamente al reloj
-            maestro del audio.
-            */
+            var tiempoFrame =
+                1000 / FPS;
+
+
+            var espera =
+                tiempoFrame -
+                usado;
+
+
+            if (espera < 0) {
+                espera = 0;
+            }
+
 
             if (reproduciendo) {
 
                 setTimeout(
-                    actualizarVideo,
-                    5
+                    siguienteFrame,
+                    espera
                 );
 
             }
@@ -959,14 +713,11 @@ function mostrarFrame() {
             }
 
 
-            decodificando = false;
-
-
             if (reproduciendo) {
 
                 setTimeout(
-                    actualizarVideo,
-                    5
+                    siguienteFrame,
+                    1
                 );
 
             }
@@ -980,11 +731,9 @@ function mostrarFrame() {
 }
 
 
-/*
-=========================================================
-PLAY
-=========================================================
-*/
+/* =====================================================
+   PLAY
+   ===================================================== */
 
 function reproducir() {
 
@@ -996,55 +745,51 @@ function reproducir() {
     reproduciendo = true;
 
 
-    mostrar(
-        "Reproduciendo..."
+    actualizarEstado(
+        "Iniciando..."
     );
 
 
     /*
-    Es importante hacer audio.play()
-    directamente después de tocar PLAY.
+     * El vídeo arranca independientemente
+     * del audio.
+     */
 
-    Esto ayuda con las restricciones
-    de audio de los navegadores.
-    */
+    siguienteFrame();
+
+
+    /*
+     * Intentamos arrancar audio aparte.
+     */
 
     try {
 
-        audio.play();
+        var resultado =
+            audio.play();
+
+
+        /*
+         * No usamos .then(), para mantener
+         * compatibilidad con el MCU1.
+         */
 
     }
 
     catch(e) {
 
-        mostrar(
-            "ERROR AUDIO: " +
+        actualizarEstado(
+            "VIDEO OK - ERROR AUDIO: " +
             e.message
         );
 
     }
 
-
-    if (
-        frames.length === 0 &&
-        !finArchivo
-    ) {
-
-        descargarBloque();
-
-    }
-
-
-    actualizarVideo();
-
 }
 
 
-/*
-=========================================================
-PAUSA
-=========================================================
-*/
+/* =====================================================
+   PAUSA
+   ===================================================== */
 
 function pausar() {
 
@@ -1061,122 +806,72 @@ function pausar() {
     }
 
 
-    mostrar(
+    actualizarEstado(
         "Pausa"
     );
 
 }
 
 
-/*
-=========================================================
-VOLUMEN
-=========================================================
-*/
+/* =====================================================
+   VOLUMEN
+   ===================================================== */
 
 function cambiarVolumen(valor) {
 
-    var volumen =
+    audio.volume =
         parseInt(
             valor,
             10
         ) / 100;
 
 
-    audio.volume =
-        volumen;
-
-
     volumenTexto.innerHTML =
-        "Volumen: " +
         valor +
         "%";
 
 }
 
 
-/*
-=========================================================
-MOSTRAR TIEMPO
-=========================================================
-*/
+/* =====================================================
+   EVENTOS AUDIO
+   ===================================================== */
 
-function formatoTiempo(segundos) {
-
-    segundos =
-        Math.floor(
-            segundos || 0
-        );
-
-
-    var minutos =
-        Math.floor(
-            segundos / 60
-        );
-
-
-    var seg =
-        segundos % 60;
-
-
-    if (minutos < 10) {
-
-        minutos =
-            "0" +
-            minutos;
-
-    }
-
-
-    if (seg < 10) {
-
-        seg =
-            "0" +
-            seg;
-
-    }
-
-
-    return (
-        minutos +
-        ":" +
-        seg
-    );
-
-}
-
-
-/*
-Actualizamos la pantalla de tiempo
-dos veces por segundo.
-*/
-
-setInterval(
+audio.onloadedmetadata =
     function() {
 
-        tiempoTexto.innerHTML =
-            formatoTiempo(
-                audio.currentTime
-            );
+        actualizarEstado(
+            "Audio: metadata OK"
+        );
 
-    },
-    500
-);
+    };
 
 
-/*
-=========================================================
-EVENTOS DEL AUDIO
-=========================================================
-*/
-
-audio.onended =
+audio.oncanplay =
     function() {
 
-        reproduciendo = false;
+        actualizarEstado(
+            "Audio: CAN PLAY"
+        );
 
-        mostrar(
-            "Fin del episodio"
+    };
+
+
+audio.onplaying =
+    function() {
+
+        actualizarEstado(
+            "Audio reproduciendo"
+        );
+
+    };
+
+
+audio.onwaiting =
+    function() {
+
+        actualizarEstado(
+            "Audio esperando datos"
         );
 
     };
@@ -1185,21 +880,39 @@ audio.onended =
 audio.onerror =
     function() {
 
-        mostrar(
-            "ERROR cargando episodio1.mp3"
+        actualizarEstado(
+            "ERROR cargando MP3"
         );
 
     };
 
 
-/*
-=========================================================
-PRECARGA MJPEG
-=========================================================
-*/
+/* =====================================================
+   ACTUALIZACION DIAGNOSTICO
+   ===================================================== */
 
-mostrar(
-    "Preparando MJPEG + audio..."
+setInterval(
+    function() {
+
+        if (reproduciendo) {
+
+            actualizarEstado(
+                "Reproduciendo"
+            );
+
+        }
+
+    },
+    1000
+);
+
+
+/* =====================================================
+   PRECARGA
+   ===================================================== */
+
+actualizarEstado(
+    "Preparando MJPEG y MP3..."
 );
 
 descargarBloque();
