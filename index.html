@@ -6,142 +6,226 @@
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0">
 
-    <title>Tesla MCU1 - JSMpeg</title>
+    <title>Tesla MCU1 Player</title>
 
     <style>
         html, body {
             margin: 0;
             padding: 0;
-            background: black;
-            color: white;
+            background: #000;
+            color: #fff;
             font-family: Arial, sans-serif;
-            text-align: center;
         }
 
-        h2 {
-            font-size: 30px;
-            margin: 15px;
-        }
-
-        #contenedor {
+        #player {
             width: 100%;
-            background: black;
+            text-align: center;
         }
 
         #pantalla {
             width: 100%;
             height: auto;
-            background: black;
+            background: #000;
+            display: block;
+        }
+
+        #controles {
+            padding: 15px 25px 25px 25px;
+            background: #161616;
+        }
+
+        #botones {
+            text-align: center;
+            margin-bottom: 15px;
         }
 
         button {
-            font-size: 26px;
-            padding: 15px 35px;
-            margin: 10px;
-            cursor: pointer;
+            font-size: 24px;
+            padding: 12px 25px;
+            margin: 5px;
+        }
+
+        .fila {
+            width: 100%;
+            margin-top: 18px;
+            margin-bottom: 18px;
+        }
+
+        .titulo {
+            font-size: 21px;
+            margin-bottom: 8px;
+        }
+
+        input[type=range] {
+            width: 100%;
+            height: 35px;
+        }
+
+        #tiempo {
+            font-size: 22px;
+            text-align: center;
+            margin-top: 5px;
+        }
+
+        #volumenTexto {
+            font-size: 20px;
+            float: right;
         }
 
         #estado {
-            margin: 15px;
-            padding: 15px;
-            background: #333;
-            font-size: 20px;
-            text-align: left;
+            font-size: 17px;
+            color: #aaa;
+            margin-top: 10px;
+            text-align: center;
         }
     </style>
 </head>
 
 <body>
 
-<h2>Tesla MCU1 - MPEG1</h2>
+<div id="player">
 
-<div id="contenedor">
     <canvas id="pantalla"></canvas>
-</div>
 
-<div>
-    <button onclick="reproducir()">
-        PLAY
-    </button>
+    <div id="controles">
 
-    <button onclick="pausar()">
-        PAUSA
-    </button>
+        <div id="botones">
 
-    <button onclick="subirVolumen()">
-        VOL +
-    </button>
-</div>
+            <button onclick="reproducir()">
+                PLAY
+            </button>
 
-<div id="estado">
-    Inicializando...
+            <button onclick="pausar()">
+                PAUSA
+            </button>
+
+            <button onclick="retroceder()">
+                -30s
+            </button>
+
+            <button onclick="avanzar()">
+                +30s
+            </button>
+
+        </div>
+
+
+        <!-- BARRA DE TIEMPO -->
+
+        <div class="fila">
+
+            <div class="titulo">
+                Posicion
+            </div>
+
+            <input
+                id="barraTiempo"
+                type="range"
+                min="0"
+                max="1301.72"
+                step="1"
+                value="0"
+                onchange="cambiarTiempo(this.value)"
+                onmousedown="moviendoBarra=true"
+                onmouseup="moviendoBarra=false"
+                ontouchstart="moviendoBarra=true"
+                ontouchend="moviendoBarra=false"
+            >
+
+            <div id="tiempo">
+                00:00 / 21:41
+            </div>
+
+        </div>
+
+
+        <!-- VOLUMEN -->
+
+        <div class="fila">
+
+            <div class="titulo">
+                Volumen
+                <span id="volumenTexto">70%</span>
+            </div>
+
+            <input
+                id="barraVolumen"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="70"
+                oninput="cambiarVolumen(this.value)"
+                onchange="cambiarVolumen(this.value)"
+            >
+
+        </div>
+
+        <div id="estado">
+            Inicializando reproductor...
+        </div>
+
+    </div>
+
 </div>
 
 
 <script src="jsmpeg.min.js"></script>
 
+
 <script>
 
 /*
- * =====================================================
- * CONFIGURACION
- * =====================================================
+ =========================================================
+ CONFIGURACION
+ =========================================================
  */
 
 var VIDEO_URL =
-    "https://media.githubusercontent.com/media/guysofcms/mpgTest/refs/heads/main/episodio1.ts";
+"https://media.githubusercontent.com/media/guysofcms/mpgTest/refs/heads/main/episodio1.ts";
 
 
 /*
- * =====================================================
- * VARIABLES
- * =====================================================
+ Duracion obtenida con ffprobe:
+ 00:21:41.72
+ */
+var DURACION = 1301.72;
+
+
+/*
+ =========================================================
+ ELEMENTOS
+ =========================================================
  */
 
-var estado = document.getElementById("estado");
-var canvas = document.getElementById("pantalla");
+var canvas =
+    document.getElementById("pantalla");
+
+var barraTiempo =
+    document.getElementById("barraTiempo");
+
+var barraVolumen =
+    document.getElementById("barraVolumen");
+
+var volumenTexto =
+    document.getElementById("volumenTexto");
+
+var tiempoTexto =
+    document.getElementById("tiempo");
+
+var estado =
+    document.getElementById("estado");
+
 
 var player = null;
 
-var videoDetectado = false;
-var audioDetectado = false;
+var moviendoBarra = false;
 
 
 /*
- * =====================================================
- * ESTADO
- * =====================================================
- */
-
-function mostrar(texto) {
-    estado.innerHTML = texto;
-}
-
-
-/*
- * =====================================================
- * COMPROBAR WEBAUDIO
- * =====================================================
- */
-
-function comprobarAudio() {
-
-    var AudioContext =
-        window.AudioContext ||
-        window.webkitAudioContext;
-
-    if (AudioContext) {
-        return "WebAudio disponible";
-    }
-
-    return "WebAudio NO disponible";
-}
-
-
-/*
- * =====================================================
- * CREAR REPRODUCTOR
- * =====================================================
+ =========================================================
+ CREAR JSMPEG
+ =========================================================
  */
 
 try {
@@ -151,205 +235,147 @@ try {
         {
             canvas: canvas,
 
-            /*
-             * No arrancamos automáticamente.
-             * El usuario pulsa PLAY.
-             */
             autoplay: false,
 
             loop: false,
 
-            /*
-             * AUDIO ACTIVADO
-             */
             audio: true,
 
             video: true,
 
-            /*
-             * Para máxima compatibilidad
-             * con el navegador antiguo del MCU1.
-             */
-            disableGl: true,
 
+            /*
+             * Dejamos WebGL disponible.
+             *
+             * Si el MCU1 no lo soporta,
+             * JSMpeg vuelve automaticamente
+             * a Canvas2D.
+             *
+             * Puede ayudar a descargar trabajo
+             * de la CPU.
+             */
+            disableGl: false,
+
+
+            /*
+             * Seguimos desactivando WASM
+             * para máxima compatibilidad MCU1.
+             */
             disableWebAssembly: true,
 
-            /*
-             * Descargar el TS progresivamente.
-             */
+
             progressive: true,
 
             throttled: true,
 
-            /*
-             * Mostrar primer frame.
-             */
+            chunkSize: 1024 * 1024,
+
             decodeFirstFrame: true,
 
-            /*
-             * =================================================
-             * EVENTOS
-             * =================================================
-             */
 
             onSourceEstablished: function() {
 
-                mostrar(
-                    "Conexion con el video OK" +
-                    "<br>" +
-                    comprobarAudio()
-                );
-            },
+                estado.innerHTML =
+                    "Video conectado";
 
-
-            onVideoDecode: function() {
-
-                if (!videoDetectado) {
-
-                    videoDetectado = true;
-
-                    mostrarEstado();
-                }
-            },
-
-
-            onAudioDecode: function() {
-
-                if (!audioDetectado) {
-
-                    audioDetectado = true;
-
-                    mostrarEstado();
-                }
             },
 
 
             onPlay: function() {
 
-                mostrarEstado();
+                estado.innerHTML =
+                    "Reproduciendo";
+
             },
 
 
             onPause: function() {
 
-                mostrarEstado();
+                estado.innerHTML =
+                    "Pausa";
+
             },
 
 
             onStalled: function() {
 
                 estado.innerHTML =
-                    estado.innerHTML +
-                    "<br>Esperando datos...";
+                    "Cargando datos...";
+
             },
 
 
             onEnded: function() {
 
-                mostrar(
-                    "Fin del video" +
-                    "<br>" +
-                    "Video MPEG1: " +
-                    (videoDetectado ? "OK" : "NO") +
-                    "<br>" +
-                    "Audio MP2: " +
-                    (audioDetectado ? "OK" : "NO")
-                );
+                estado.innerHTML =
+                    "Fin del video";
+
             }
+
         }
     );
 
 
     /*
-     * Volumen máximo
+     * Volumen inicial 70%
      */
-    player.volume = 1;
+    player.volume = 0.70;
 
-
-    mostrar(
-        "JSMpeg preparado" +
-        "<br>" +
-        comprobarAudio() +
-        "<br>" +
-        "Pulsa PLAY"
-    );
+    estado.innerHTML =
+        "Preparado - pulsa PLAY";
 
 }
-catch (e) {
+catch(e) {
 
-    mostrar(
-        "ERROR AL CREAR JSMPEG" +
-        "<br>" +
-        e.message
-    );
+    estado.innerHTML =
+        "ERROR: " + e.message;
+
 }
 
 
 /*
- * =====================================================
- * MOSTRAR DIAGNOSTICO
- * =====================================================
+ =========================================================
+ DESBLOQUEAR WEBAUDIO
+ =========================================================
  */
 
-function mostrarEstado() {
+function desbloquearAudio(callback) {
 
-    var texto = "";
+    if (!player || !player.audioOut) {
 
-    texto +=
-        "Video MPEG1: " +
-        (videoDetectado ? "DECODIFICANDO OK" : "esperando...");
+        if (callback) {
+            callback();
+        }
 
-    texto += "<br>";
-
-    texto +=
-        "Audio MP2: " +
-        (audioDetectado ? "DECODIFICANDO OK" : "esperando...");
-
-    texto += "<br>";
-
-    texto += comprobarAudio();
-
-    texto += "<br>";
-
-    if (player) {
-
-        texto +=
-            "Volumen: " +
-            Math.round(player.volume * 100) +
-            "%";
-
-        texto += "<br>";
-
-        texto +=
-            "Estado: " +
-            (player.paused ? "PAUSA" : "REPRODUCIENDO");
-    }
-
-    mostrar(texto);
-}
-
-
-/*
- * =====================================================
- * DESBLOQUEAR AUDIO
- * =====================================================
- */
-
-function desbloquearAudio() {
-
-    if (!player) {
         return;
     }
 
+
     /*
-     * JSMpeg tiene un mecanismo interno
-     * para desbloquear WebAudio en navegadores
-     * que requieren interacción del usuario.
+     * Intentamos reanudar AudioContext
      */
     try {
 
         if (
-            player.audioOut &&
+            player.audioOut.context &&
+            player.audioOut.context.resume
+        ) {
+
+            player.audioOut.context.resume();
+
+        }
+
+    }
+    catch(e) {
+    }
+
+
+    /*
+     * Desbloqueo JSMpeg
+     */
+    try {
+
+        if (
             player.audioOut.unlock &&
             !player.audioOut.unlocked
         ) {
@@ -357,94 +383,56 @@ function desbloquearAudio() {
             player.audioOut.unlock(
                 function() {
 
-                    player.volume = 1;
+                    if (callback) {
+                        callback();
+                    }
 
-                    player.play();
-
-                    mostrarEstado();
                 }
             );
 
             return;
+
         }
 
     }
-    catch (e) {
-
-        /*
-         * Si unlock no funciona,
-         * continuamos con el método normal.
-         */
+    catch(e) {
     }
 
 
-    /*
-     * Algunos navegadores mantienen
-     * AudioContext suspendido.
-     */
-    try {
-
-        if (
-            player.audioOut &&
-            player.audioOut.context &&
-            player.audioOut.context.resume
-        ) {
-
-            player.audioOut.context.resume();
-        }
-
-    }
-    catch (e) {
+    if (callback) {
+        callback();
     }
 
-
-    player.volume = 1;
-
-    player.play();
 }
 
 
 /*
- * =====================================================
- * PLAY
- * =====================================================
+ =========================================================
+ PLAY
+ =========================================================
  */
 
 function reproducir() {
 
     if (!player) {
-
-        mostrar(
-            "ERROR: reproductor no inicializado"
-        );
-
         return;
     }
 
+    desbloquearAudio(
+        function() {
 
-    mostrar(
-        "Intentando iniciar video y audio..."
+            player.play();
+
+        }
     );
 
-
-    /*
-     * Importante:
-     *
-     * desbloquearAudio() se ejecuta
-     * DIRECTAMENTE desde el clic del usuario.
-     *
-     * Esto ayuda a los navegadores que
-     * bloquean WebAudio hasta una
-     * interacción física.
-     */
-    desbloquearAudio();
 }
 
 
 /*
- * =====================================================
- * PAUSA
- * =====================================================
+ =========================================================
+ PAUSA
+ =========================================================
  */
 
 function pausar() {
@@ -453,62 +441,257 @@ function pausar() {
         return;
     }
 
-    try {
+    player.pause();
 
-        player.pause();
-
-        mostrarEstado();
-
-    }
-    catch (e) {
-
-        mostrar(
-            "ERROR PAUSA" +
-            "<br>" +
-            e.message
-        );
-    }
 }
 
 
 /*
- * =====================================================
- * VOLUMEN
- * =====================================================
+ =========================================================
+ VOLUMEN
+ =========================================================
  */
 
-function subirVolumen() {
+function cambiarVolumen(valor) {
 
     if (!player) {
         return;
     }
 
-    player.volume = 1;
+    var volumen =
+        parseInt(valor, 10) / 100;
+
+    player.volume = volumen;
+
+    volumenTexto.innerHTML =
+        valor + "%";
+
+}
+
+
+/*
+ =========================================================
+ CAMBIAR POSICION
+ =========================================================
+ */
+
+function irATiempo(segundos) {
+
+    if (!player) {
+        return;
+    }
+
+
+    segundos =
+        parseFloat(segundos);
+
+
+    if (segundos < 0) {
+        segundos = 0;
+    }
+
+
+    if (segundos > DURACION) {
+        segundos = DURACION;
+    }
+
 
     /*
-     * Intentamos también despertar WebAudio
-     * aprovechando que VOL+ es otro clic
-     * del usuario.
+     * Guardamos si estaba reproduciendo.
      */
+    var estabaReproduciendo =
+        !player.paused;
 
-    try {
 
-        if (
-            player.audioOut &&
-            player.audioOut.context &&
-            player.audioOut.context.resume
-        ) {
+    /*
+     * Importante:
+     *
+     * pause() hace que JSMpeg corte
+     * el audio que ya tenia encolado.
+     *
+     * Esto evita escuchar audio
+     * correspondiente a la posicion anterior.
+     */
+    player.pause();
 
-            player.audioOut.context.resume();
+
+    /*
+     * JSMpeg permite cambiar currentTime.
+     */
+    player.currentTime =
+        segundos;
+
+
+    barraTiempo.value =
+        segundos;
+
+
+    actualizarTextoTiempo(
+        segundos
+    );
+
+
+    /*
+     * Si antes estaba reproduciendo,
+     * continuamos.
+     */
+    if (estabaReproduciendo) {
+
+        desbloquearAudio(
+            function() {
+
+                player.play();
+
+            }
+        );
+
+    }
+
+}
+
+
+/*
+ =========================================================
+ BARRA DE TIEMPO
+ =========================================================
+ */
+
+function cambiarTiempo(valor) {
+
+    moviendoBarra = false;
+
+    irATiempo(
+        parseFloat(valor)
+    );
+
+}
+
+
+/*
+ =========================================================
+ +/- 30 SEGUNDOS
+ =========================================================
+ */
+
+function avanzar() {
+
+    if (!player) {
+        return;
+    }
+
+    irATiempo(
+        player.currentTime + 30
+    );
+
+}
+
+
+function retroceder() {
+
+    if (!player) {
+        return;
+    }
+
+    irATiempo(
+        player.currentTime - 30
+    );
+
+}
+
+
+/*
+ =========================================================
+ MOSTRAR TIEMPO
+ =========================================================
+ */
+
+function formatoTiempo(segundos) {
+
+    segundos =
+        Math.max(
+            0,
+            Math.floor(segundos)
+        );
+
+
+    var minutos =
+        Math.floor(
+            segundos / 60
+        );
+
+
+    var seg =
+        segundos % 60;
+
+
+    if (minutos < 10) {
+
+        minutos =
+            "0" + minutos;
+
+    }
+
+
+    if (seg < 10) {
+
+        seg =
+            "0" + seg;
+
+    }
+
+
+    return minutos + ":" + seg;
+
+}
+
+
+function actualizarTextoTiempo(actual) {
+
+    tiempoTexto.innerHTML =
+        formatoTiempo(actual) +
+        " / " +
+        formatoTiempo(DURACION);
+
+}
+
+
+/*
+ =========================================================
+ ACTUALIZAR INTERFAZ
+ =========================================================
+ */
+
+/*
+ * Medio segundo es suficiente y ahorramos
+ * trabajo al MCU1.
+ */
+setInterval(
+    function() {
+
+        if (!player) {
+            return;
         }
 
-    }
-    catch (e) {
-    }
+
+        var actual =
+            player.currentTime || 0;
 
 
-    mostrarEstado();
-}
+        if (!moviendoBarra) {
+
+            barraTiempo.value =
+                actual;
+
+        }
+
+
+        actualizarTextoTiempo(
+            actual
+        );
+
+    },
+    500
+);
 
 </script>
 
