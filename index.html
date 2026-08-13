@@ -2,920 +2,156 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <title>Tesla MCU1 Video Test</title>
 
     <meta name="viewport"
-          content="width=device-width, initial-scale=1.0">
-
-    <title>Tesla MCU1 MJPEG + Audio</title>
+          content="width=device-width,
+                   initial-scale=1.0,
+                   maximum-scale=1.0,
+                   user-scalable=no">
 
     <style>
         html, body {
             margin: 0;
             padding: 0;
-            background: black;
-            color: white;
+            background: #000;
+            color: #fff;
             font-family: Arial, sans-serif;
-        }
-
-        #pantalla {
-            display: block;
             width: 100%;
-            height: auto;
-            background: black;
+            height: 100%;
         }
 
-        #controles {
-            padding: 15px;
+        #container {
+            width: 100%;
+            height: 100%;
             text-align: center;
+        }
+
+        #title {
+            padding: 8px;
+            font-size: 18px;
+        }
+
+        #video {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            max-height: 82vh;
             background: #111;
         }
 
+        #controls {
+            margin-top: 10px;
+        }
+
         button {
-            font-size: 28px;
-            padding: 15px 35px;
-            margin: 8px;
+            font-size: 20px;
+            padding: 10px 22px;
+            margin: 4px;
         }
 
-        #barraVolumen {
-            width: 85%;
-            height: 35px;
-        }
-
-        #estado {
-            margin-top: 15px;
-            font-size: 19px;
-            line-height: 1.5;
+        #status {
+            margin-top: 8px;
+            font-size: 14px;
+            color: #ccc;
         }
     </style>
 </head>
 
 <body>
 
-<canvas id="pantalla"></canvas>
+<div id="container">
 
-<audio
-    id="audio"
-    preload="auto"
-    src="episodio1.mp3">
-</audio>
-
-<div id="controles">
-
-    <button onclick="reproducir()">
-        PLAY
-    </button>
-
-    <button onclick="pausar()">
-        PAUSA
-    </button>
-
-    <br>
-
-    <div>
-        Volumen:
-        <span id="volumenTexto">70%</span>
+    <div id="title">
+        Tesla MCU1 Video Test
     </div>
 
-    <input
-        id="barraVolumen"
-        type="range"
-        min="0"
-        max="100"
-        value="70"
-        onchange="cambiarVolumen(this.value)"
-        oninput="cambiarVolumen(this.value)"
-    >
+    <video
+        id="video"
+        width="640"
+        controls
+        preload="metadata"
+        playsinline>
+        
+        <source src="episodio1.mp4" type="video/mp4">
 
-    <div id="estado">
-        Preparando...
+        Tu navegador no soporta video HTML5.
+    </video>
+
+    <div id="controls">
+        <button onclick="playVideo()">Play</button>
+        <button onclick="pauseVideo()">Pause</button>
+        <button onclick="restartVideo()">Inicio</button>
+    </div>
+
+    <div id="status">
+        Esperando...
     </div>
 
 </div>
 
+<script type="text/javascript">
 
-<script>
+var video = document.getElementById("video");
+var statusBox = document.getElementById("status");
 
-/* =====================================================
-   CONFIGURACION
-   ===================================================== */
-
-var FPS = 25;
-
-var VIDEO_URL =
-"https://media.githubusercontent.com/media/guysofcms/mpgTest/refs/heads/main/episodio1.mjpg";
-
-var CHUNK_SIZE = 1024 * 1024;
-
-var MAX_FRAMES = 45;
-
-var MIN_FRAMES = 15;
-
-
-/* =====================================================
-   ELEMENTOS
-   ===================================================== */
-
-var canvas =
-document.getElementById("pantalla");
-
-var ctx =
-canvas.getContext("2d");
-
-var estado =
-document.getElementById("estado");
-
-var audio =
-document.getElementById("audio");
-
-var volumenTexto =
-document.getElementById("volumenTexto");
-
-
-audio.volume = 0.70;
-
-
-/* =====================================================
-   VARIABLES VIDEO
-   ===================================================== */
-
-var frames = [];
-
-var pendiente =
-new Uint8Array(0);
-
-var offset = 0;
-
-var descargando = false;
-
-var finArchivo = false;
-
-var reproduciendo = false;
-
-var primerFrame = true;
-
-var imagen =
-new Image();
-
-var URL_API =
-window.URL ||
-window.webkitURL;
-
-
-/* =====================================================
-   ESTADO
-   ===================================================== */
-
-function actualizarEstado(texto) {
-
-    var audioTime = 0;
-
+function playVideo() {
     try {
-        audioTime = audio.currentTime;
+        video.play();
+        statusBox.innerHTML = "Reproduciendo";
+    } catch (e) {
+        statusBox.innerHTML = "Error play: " + e;
     }
-    catch(e) {
-    }
-
-    estado.innerHTML =
-        texto +
-        "<br>Frames buffer: " +
-        frames.length +
-        "<br>Audio readyState: " +
-        audio.readyState +
-        "<br>Audio paused: " +
-        audio.paused +
-        "<br>Audio time: " +
-        audioTime.toFixed(1);
-
 }
 
-
-/* =====================================================
-   ARRAYS
-   ===================================================== */
-
-function copiar(datos, inicio, fin) {
-
-    var longitud =
-        fin - inicio;
-
-    var salida =
-        new Uint8Array(longitud);
-
-    var i;
-
-    for (i = 0; i < longitud; i++) {
-
-        salida[i] =
-            datos[inicio + i];
-
-    }
-
-    return salida;
+function pauseVideo() {
+    video.pause();
+    statusBox.innerHTML = "Pausado";
 }
 
-
-function unir(a, b) {
-
-    var salida =
-        new Uint8Array(
-            a.length + b.length
-        );
-
-    var i;
-
-    for (i = 0; i < a.length; i++) {
-
-        salida[i] = a[i];
-
-    }
-
-    for (i = 0; i < b.length; i++) {
-
-        salida[a.length + i] =
-            b[i];
-
-    }
-
-    return salida;
-}
-
-
-/* =====================================================
-   EXTRAER JPEG
-   ===================================================== */
-
-function procesarBloque(nuevoBloque) {
-
-    var datos =
-        unir(
-            pendiente,
-            nuevoBloque
-        );
-
-    var inicio = -1;
-
-    var i = 0;
-
-
-    while (i < datos.length - 1) {
-
-        if (inicio < 0) {
-
-            if (
-                datos[i] === 255 &&
-                datos[i + 1] === 216
-            ) {
-
-                inicio = i;
-
-                i += 2;
-
-                continue;
-            }
-
-        }
-
-        else {
-
-            if (
-                datos[i] === 255 &&
-                datos[i + 1] === 217
-            ) {
-
-                var frame =
-                    copiar(
-                        datos,
-                        inicio,
-                        i + 2
-                    );
-
-                frames.push(frame);
-
-                inicio = -1;
-
-                i += 2;
-
-                continue;
-            }
-
-        }
-
-        i++;
-    }
-
-
-    if (inicio >= 0) {
-
-        pendiente =
-            copiar(
-                datos,
-                inicio,
-                datos.length
-            );
-
-    }
-
-    else {
-
-        if (
-            datos.length > 0 &&
-            datos[datos.length - 1] === 255
-        ) {
-
-            pendiente =
-                copiar(
-                    datos,
-                    datos.length - 1,
-                    datos.length
-                );
-
-        }
-
-        else {
-
-            pendiente =
-                new Uint8Array(0);
-
-        }
-
-    }
-
-}
-
-
-/* =====================================================
-   HTTP RANGE
-   ===================================================== */
-
-function descargarBloque() {
-
-    if (descargando) {
-        return;
-    }
-
-    if (finArchivo) {
-        return;
-    }
-
-    if (frames.length >= MAX_FRAMES) {
-        return;
-    }
-
-
-    descargando = true;
-
-
-    var inicio = offset;
-
-    var final =
-        offset +
-        CHUNK_SIZE -
-        1;
-
-
-    var xhr =
-        new XMLHttpRequest();
-
-
-    xhr.open(
-        "GET",
-        VIDEO_URL,
-        true
-    );
-
-
-    xhr.setRequestHeader(
-        "Range",
-        "bytes=" +
-        inicio +
-        "-" +
-        final
-    );
-
-
-    xhr.responseType =
-        "arraybuffer";
-
-
-    xhr.onreadystatechange =
-        function() {
-
-
-            if (xhr.readyState !== 4) {
-                return;
-            }
-
-
-            descargando = false;
-
-
-            if (xhr.status === 206) {
-
-
-                var datos =
-                    new Uint8Array(
-                        xhr.response
-                    );
-
-
-                if (datos.length === 0) {
-
-                    finArchivo = true;
-
-                    return;
-                }
-
-
-                procesarBloque(datos);
-
-
-                offset +=
-                    datos.length;
-
-
-                actualizarEstado(
-                    "MJPEG conectado"
-                );
-
-
-                if (
-                    datos.length <
-                    CHUNK_SIZE
-                ) {
-
-                    finArchivo = true;
-
-                }
-
-
-                if (
-                    frames.length <
-                    MIN_FRAMES &&
-                    !finArchivo
-                ) {
-
-                    descargarBloque();
-
-                }
-
-            }
-
-            else {
-
-                actualizarEstado(
-                    "ERROR HTTP MJPEG: " +
-                    xhr.status
-                );
-
-            }
-
-        };
-
-
+function restartVideo() {
     try {
-
-        xhr.send(null);
-
+        video.currentTime = 0;
+        video.play();
+    } catch (e) {
+        statusBox.innerHTML = "Error restart: " + e;
     }
-
-    catch(e) {
-
-        descargando = false;
-
-        actualizarEstado(
-            "ERROR XHR: " +
-            e.message
-        );
-
-    }
-
 }
 
+video.addEventListener("loadedmetadata", function() {
+    statusBox.innerHTML =
+        "Video cargado - " +
+        video.videoWidth +
+        "x" +
+        video.videoHeight;
+}, false);
 
-/* =====================================================
-   BLOB
-   ===================================================== */
+video.addEventListener("error", function() {
 
-function crearBlob(datos) {
+    var message = "Error de video";
 
-    try {
+    if (video.error) {
 
-        return new Blob(
-            [datos],
-            {
-                type: "image/jpeg"
-            }
-        );
-
-    }
-
-    catch(e) {
-
-        var BlobBuilder =
-            window.WebKitBlobBuilder ||
-            window.MozBlobBuilder;
-
-
-        if (BlobBuilder) {
-
-            var bb =
-                new BlobBuilder();
-
-            bb.append(
-                datos.buffer
-            );
-
-            return bb.getBlob(
-                "image/jpeg"
-            );
-
+        if (video.error.code == 1) {
+            message = "MEDIA_ERR_ABORTED";
         }
 
-        throw e;
-
-    }
-
-}
-
-
-/* =====================================================
-   VIDEO
-   ===================================================== */
-
-function siguienteFrame() {
-
-    if (!reproduciendo) {
-        return;
-    }
-
-
-    if (frames.length === 0) {
-
-
-        if (finArchivo) {
-
-            reproduciendo = false;
-
-            audio.pause();
-
-            actualizarEstado(
-                "Fin del video"
-            );
-
-            return;
+        if (video.error.code == 2) {
+            message = "MEDIA_ERR_NETWORK";
         }
 
-
-        actualizarEstado(
-            "Esperando MJPEG..."
-        );
-
-
-        descargarBloque();
-
-
-        setTimeout(
-            siguienteFrame,
-            100
-        );
-
-
-        return;
-    }
-
-
-    if (
-        frames.length <
-        MIN_FRAMES
-    ) {
-
-        descargarBloque();
-
-    }
-
-
-    var frame =
-        frames.shift();
-
-
-    var blob;
-
-
-    try {
-
-        blob =
-            crearBlob(frame);
-
-    }
-
-    catch(e) {
-
-        actualizarEstado(
-            "ERROR Blob"
-        );
-
-        return;
-    }
-
-
-    var url =
-        URL_API.createObjectURL(
-            blob
-        );
-
-
-    var inicioDecode =
-        new Date().getTime();
-
-
-    imagen.onload =
-        function() {
-
-
-            if (primerFrame) {
-
-                canvas.width =
-                    imagen.width;
-
-                canvas.height =
-                    imagen.height;
-
-                primerFrame = false;
-
-            }
-
-
-            ctx.drawImage(
-                imagen,
-                0,
-                0,
-                canvas.width,
-                canvas.height
-            );
-
-
-            try {
-
-                URL_API.revokeObjectURL(
-                    url
-                );
-
-            }
-
-            catch(e) {
-            }
-
-
-            var usado =
-                new Date().getTime() -
-                inicioDecode;
-
-
-            var tiempoFrame =
-                1000 / FPS;
-
-
-            var espera =
-                tiempoFrame -
-                usado;
-
-
-            if (espera < 0) {
-                espera = 0;
-            }
-
-
-            if (reproduciendo) {
-
-                setTimeout(
-                    siguienteFrame,
-                    espera
-                );
-
-            }
-
-        };
-
-
-    imagen.onerror =
-        function() {
-
-
-            try {
-
-                URL_API.revokeObjectURL(
-                    url
-                );
-
-            }
-
-            catch(e) {
-            }
-
-
-            if (reproduciendo) {
-
-                setTimeout(
-                    siguienteFrame,
-                    1
-                );
-
-            }
-
-        };
-
-
-    imagen.src =
-        url;
-
-}
-
-
-/* =====================================================
-   PLAY
-   ===================================================== */
-
-function reproducir() {
-
-    if (reproduciendo) {
-        return;
-    }
-
-
-    reproduciendo = true;
-
-
-    actualizarEstado(
-        "Iniciando..."
-    );
-
-
-    /*
-     * El vídeo arranca independientemente
-     * del audio.
-     */
-
-    siguienteFrame();
-
-
-    /*
-     * Intentamos arrancar audio aparte.
-     */
-
-    try {
-
-        var resultado =
-            audio.play();
-
-
-        /*
-         * No usamos .then(), para mantener
-         * compatibilidad con el MCU1.
-         */
-
-    }
-
-    catch(e) {
-
-        actualizarEstado(
-            "VIDEO OK - ERROR AUDIO: " +
-            e.message
-        );
-
-    }
-
-}
-
-
-/* =====================================================
-   PAUSA
-   ===================================================== */
-
-function pausar() {
-
-    reproduciendo = false;
-
-
-    try {
-
-        audio.pause();
-
-    }
-
-    catch(e) {
-    }
-
-
-    actualizarEstado(
-        "Pausa"
-    );
-
-}
-
-
-/* =====================================================
-   VOLUMEN
-   ===================================================== */
-
-function cambiarVolumen(valor) {
-
-    audio.volume =
-        parseInt(
-            valor,
-            10
-        ) / 100;
-
-
-    volumenTexto.innerHTML =
-        valor +
-        "%";
-
-}
-
-
-/* =====================================================
-   EVENTOS AUDIO
-   ===================================================== */
-
-audio.onloadedmetadata =
-    function() {
-
-        actualizarEstado(
-            "Audio: metadata OK"
-        );
-
-    };
-
-
-audio.oncanplay =
-    function() {
-
-        actualizarEstado(
-            "Audio: CAN PLAY"
-        );
-
-    };
-
-
-audio.onplaying =
-    function() {
-
-        actualizarEstado(
-            "Audio reproduciendo"
-        );
-
-    };
-
-
-audio.onwaiting =
-    function() {
-
-        actualizarEstado(
-            "Audio esperando datos"
-        );
-
-    };
-
-
-audio.onerror =
-    function() {
-
-        actualizarEstado(
-            "ERROR cargando MP3"
-        );
-
-    };
-
-
-/* =====================================================
-   ACTUALIZACION DIAGNOSTICO
-   ===================================================== */
-
-setInterval(
-    function() {
-
-        if (reproduciendo) {
-
-            actualizarEstado(
-                "Reproduciendo"
-            );
-
+        if (video.error.code == 3) {
+            message = "MEDIA_ERR_DECODE";
         }
 
-    },
-    1000
-);
+        if (video.error.code == 4) {
+            message = "MEDIA_ERR_SRC_NOT_SUPPORTED";
+        }
+    }
 
+    statusBox.innerHTML = message;
 
-/* =====================================================
-   PRECARGA
-   ===================================================== */
-
-actualizarEstado(
-    "Preparando MJPEG y MP3..."
-);
-
-descargarBloque();
+}, false);
 
 </script>
 
